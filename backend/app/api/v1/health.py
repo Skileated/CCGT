@@ -30,6 +30,6 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         version=settings.VERSION,
-        model_loaded=model_loaded
+        is_model_loaded=model_loaded
     )
 

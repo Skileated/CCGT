@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from typing import List, Dict, Tuple
 import logging
+import torch
 
 from ..models.model import get_model_instance
 
@@ -95,8 +96,13 @@ def build_graph_for_visualization(
     if node_importances is None:
         try:
             _, node_importances_tensor = get_model_instance().predict(graph)
-            node_importances = node_importances_tensor.numpy()
-        except:
+            # Detach and convert to numpy safely
+            if isinstance(node_importances_tensor, torch.Tensor):
+                node_importances = node_importances_tensor.detach().cpu().numpy()
+            else:
+                node_importances = node_importances_tensor
+        except Exception as e:
+            logger.warning(f"Failed to get node importances, using entropy fallback: {e}")
             # Fallback: use entropy as importance (inverted)
             node_importances = 1.0 / (entropy_array + 0.1)
             node_importances = node_importances / node_importances.max()
@@ -119,8 +125,9 @@ def build_graph_for_visualization(
     disruption_set = {(d["from_idx"], d["to_idx"]) for d in disruption_report}
     
     edges = []
-    edge_index = graph.edge_index.cpu().numpy()
-    edge_weights = graph.edge_attr.cpu().numpy().flatten() if graph.edge_attr is not None else None
+    # Safely convert tensors to numpy
+    edge_index = graph.edge_index.detach().cpu().numpy()
+    edge_weights = graph.edge_attr.detach().cpu().numpy().flatten() if graph.edge_attr is not None else None
     
     for i in range(edge_index.shape[1]):
         source = int(edge_index[0, i])

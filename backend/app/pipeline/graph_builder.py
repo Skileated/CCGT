@@ -84,18 +84,22 @@ def build_graph(
     
     if num_sentences == 1:
         # Single node graph
+        # Convert embeddings to float32 if needed
+        if embeddings.dtype == np.float16:
+            embeddings = embeddings.astype(np.float32)
         return Data(
             x=torch.tensor(embeddings, dtype=torch.float32),
             edge_index=torch.zeros((2, 0), dtype=torch.long),
             edge_attr=torch.zeros((0, 1), dtype=torch.float32)
         ), np.array([[1.0]]), np.array([0.0])
     
-    # Build similarity matrix
-    similarity_matrix = np.zeros((num_sentences, num_sentences))
+    # Build similarity matrix (ensure embeddings are float32 for precision)
+    embeddings_for_sim = embeddings.astype(np.float32) if embeddings.dtype == np.float16 else embeddings
+    similarity_matrix = np.zeros((num_sentences, num_sentences), dtype=np.float32)
     
     for i in range(num_sentences):
         for j in range(i + 1, num_sentences):
-            sim = cosine_similarity(embeddings[i], embeddings[j])
+            sim = cosine_similarity(embeddings_for_sim[i], embeddings_for_sim[j])
             
             # Boost if discourse markers present in either sentence
             if discourse_markers[i] or discourse_markers[j]:
@@ -136,11 +140,15 @@ def build_graph(
             edge_weights.append(weight)
             edge_weights.append(weight)
     
+    # Convert embeddings to float32 for tensor operations (float16 can cause issues)
+    if embeddings.dtype == np.float16:
+        embeddings = embeddings.astype(np.float32)
+    
     # Combine embeddings with entropy as additional feature
     node_features = np.hstack([
         embeddings,
         entropy_array.reshape(-1, 1)
-    ])
+    ]).astype(np.float32)  # Ensure float32
     
     # Convert to PyTorch tensors (CPU only, memory-efficient)
     edge_index = torch.tensor(edge_list, dtype=torch.long, device='cpu').t().contiguous()

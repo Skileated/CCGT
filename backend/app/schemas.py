@@ -6,7 +6,7 @@ Maps to SRS: API Specification and Data Models.
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class EvaluateRequest(BaseModel):
@@ -79,7 +79,9 @@ class BatchEvaluateResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response."""
+    model_config = ConfigDict(protected_namespaces=())  # Resolve conflict with "model_" namespace
+    
     status: str = Field(..., description="Service status")
     version: str = Field(..., description="API version")
-    model_loaded: bool = Field(..., description="Whether ML model is loaded")
+    is_model_loaded: bool = Field(..., description="Whether ML model is loaded", serialization_alias="model_loaded")
 

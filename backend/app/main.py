@@ -5,17 +5,42 @@ CCGT API entry point. Provides endpoints for text coherence evaluation.
 Maps to SRS: API Architecture and Endpoints.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.logging import logger
 from .api.v1 import evaluate, health
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    logger.info(f"API docs available at /docs")
+    logger.info(f"Memory-optimized mode: batch_size={settings.BATCH_SIZE}, float16={settings.USE_FLOAT16}")
+    
+    # Pre-warm the embedding model (lazy load on first use instead)
+    # This helps identify model loading issues early
+    try:
+        from .models.embeddings import get_model
+        logger.info("Model will be loaded on first request (lazy loading)")
+    except Exception as e:
+        logger.warning(f"Model import check failed: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down CCGT API")
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Contextual Coherence Graph Transformer API for text coherence evaluation"
+    description="Contextual Coherence Graph Transformer API for text coherence evaluation",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -41,26 +66,4 @@ async def root():
         "docs": "/docs",
         "health": f"{settings.API_V1_PREFIX}/health"
     }
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup."""
-    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
-    logger.info(f"API docs available at /docs")
-    logger.info(f"Memory-optimized mode: batch_size={settings.BATCH_SIZE}, float16={settings.USE_FLOAT16}")
-    
-    # Pre-warm the embedding model (lazy load on first use instead)
-    # This helps identify model loading issues early
-    try:
-        from .models.embeddings import get_model
-        logger.info("Model will be loaded on first request (lazy loading)")
-    except Exception as e:
-        logger.warning(f"Model import check failed: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Shutting down CCGT API")
 

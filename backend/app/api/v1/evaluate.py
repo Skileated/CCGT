@@ -7,6 +7,7 @@ Maps to SRS: API Evaluation Endpoints.
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 import logging
+import torch
 
 from ...schemas import (
     EvaluateRequest,
@@ -39,41 +40,72 @@ async def evaluate_text(request: EvaluateRequest):
     Accepts paragraph text and returns coherence score, disruption report, and optional graph.
     """
     try:
+        logger.info(f"Evaluating text: {len(request.text)} characters")
+        
         # Preprocess
-        sentences, discourse_markers = preprocess_text(request.text)
+        try:
+            sentences, discourse_markers = preprocess_text(request.text)
+            logger.debug(f"Preprocessed into {len(sentences)} sentences")
+        except Exception as e:
+            logger.error(f"Preprocessing failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Text preprocessing failed: {str(e)}")
         
         if len(sentences) < 1:
             raise HTTPException(status_code=400, detail="Text must contain at least one sentence")
         
         # Generate embeddings
-        embeddings = embed_sentences(sentences)
+        try:
+            embeddings = embed_sentences(sentences)
+            logger.debug(f"Generated embeddings: shape={embeddings.shape}")
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {str(e)}")
         
         # Build graph
-        graph, similarity_matrix, entropy_array = build_graph(
-            sentences,
-            embeddings,
-            discourse_markers
-        )
+        try:
+            graph, similarity_matrix, entropy_array = build_graph(
+                sentences,
+                embeddings,
+                discourse_markers
+            )
+            logger.debug(f"Built graph with {graph.num_nodes} nodes and {graph.num_edges} edges")
+        except Exception as e:
+            logger.error(f"Graph building failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to build graph: {str(e)}")
         
         # Score
-        coherence_score, disruption_report = score_text(graph, similarity_matrix, entropy_array)
+        try:
+            coherence_score, disruption_report = score_text(graph, similarity_matrix, entropy_array)
+            logger.debug(f"Computed coherence score: {coherence_score:.3f}")
+        except Exception as e:
+            logger.error(f"Scoring failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to compute coherence score: {str(e)}")
         
         # Build response
-        response = EvaluateResponse(
-            coherence_score=coherence_score,
-            coherence_percent=int(coherence_score * 100),
-            disruption_report=[
-                DisruptionItem(**d) for d in disruption_report
-            ]
-        )
+        try:
+            response = EvaluateResponse(
+                coherence_score=coherence_score,
+                coherence_percent=int(coherence_score * 100),
+                disruption_report=[
+                    DisruptionItem(**d) for d in disruption_report
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Response building failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to build response: {str(e)}")
         
         # Add graph if visualization requested
         if request.options and request.options.get("visualize", False):
             try:
                 # Get node importances
                 _, node_importances_tensor = get_model_instance().predict(graph)
-                node_importances = node_importances_tensor.numpy()
-            except:
+                # Detach and convert to numpy safely
+                if isinstance(node_importances_tensor, torch.Tensor):
+                    node_importances = node_importances_tensor.detach().cpu().numpy()
+                else:
+                    node_importances = node_importances_tensor
+            except Exception as viz_error:
+                logger.warning(f"Failed to get node importances for visualization: {viz_error}")
                 node_importances = None
             
             graph_data = build_graph_for_visualization(
