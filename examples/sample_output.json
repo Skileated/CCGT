@@ -1,0 +1,53 @@
+{
+  "coherence_score": 0.7564,
+  "coherence_percent": 76,
+  "disruption_report": [
+    {
+      "from_idx": 1,
+      "to_idx": 2,
+      "reason": "low_similarity",
+      "score": 0.3421
+    },
+    {
+      "from_idx": 3,
+      "to_idx": 4,
+      "reason": "low_similarity",
+      "score": 0.4567
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": 0,
+        "text_snippet": "The field of natural language processing has advanced significantly...",
+        "entropy": 0.5234,
+        "importance_score": 0.8234,
+        "embedding_dim_reduced": [0.123, 0.456]
+      },
+      {
+        "id": 1,
+        "text_snippet": "Machine learning models can now understand and generate human-like text...",
+        "entropy": 0.6123,
+        "importance_score": 0.7456,
+        "embedding_dim_reduced": [0.234, 0.567]
+      }
+    ],
+    "edges": [
+      {
+        "source": 0,
+        "target": 1,
+        "weight": 0.7564,
+        "discourse_marker": null,
+        "reason": null
+      },
+      {
+        "source": 1,
+        "target": 2,
+        "weight": 0.3421,
+        "discourse_marker": "however",
+        "reason": "low_similarity"
+      }
+    ]
+  }
+}
+

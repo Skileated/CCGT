@@ -1,0 +1,20 @@
+{
+  "examples": [
+    {
+      "id": 1,
+      "text": "The field of natural language processing has advanced significantly in recent years. Machine learning models can now understand and generate human-like text. However, evaluating text quality remains a challenging problem. Coherence is one important aspect of text quality. It measures how well sentences flow together and form a cohesive narrative.",
+      "expected_score_range": [0.6, 0.8]
+    },
+    {
+      "id": 2,
+      "text": "The weather was sunny yesterday. Quantum mechanics describes particle behavior. I went to the store. The theory of relativity explains spacetime. I bought some groceries.",
+      "expected_score_range": [0.2, 0.5]
+    },
+    {
+      "id": 3,
+      "text": "Artificial intelligence is transforming industries worldwide. AI systems can process vast amounts of data quickly. Furthermore, they enable automation of complex tasks. Consequently, businesses are adopting AI at an unprecedented rate. Therefore, understanding AI capabilities is crucial for success.",
+      "expected_score_range": [0.7, 0.9]
+    }
+  ]
+}
+

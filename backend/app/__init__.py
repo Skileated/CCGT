@@ -1,0 +1,2 @@
+"""CCGT Backend Application."""
+
