@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: ccgt-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python -m spacy download en_core_web_sm
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        sync: false
+      - key: HOST
+        value: 0.0.0.0
+      - key: DEVICE
+        value: cpu
+      - key: LOG_LEVEL
+        value: INFO
+      - key: OPTIMIZED_MODE
+        value: "true"
+      - key: CACHE_EMBEDDINGS
+        value: "true"
+      - key: CORS_ORIGINS
+        value: "*"
+    healthCheckPath: /api/v1/health
+    plan: starter
+
+

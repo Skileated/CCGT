@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     
     # Server Configuration
-    HOST: str = "127.0.0.1"  # Local only
-    PORT: int = 8000
+    HOST: str = os.getenv("HOST", "127.0.0.1")  # Render sets to 0.0.0.0
+    PORT: int = int(os.getenv("PORT", "8000"))  # Render provides PORT env var
     WORKERS: int = 1  # Single worker for memory efficiency
     
     # Security
@@ -58,8 +58,11 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     
     # Logging
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE: Optional[str] = None
+    
+    # CORS Configuration (for production)
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "*")  # Comma-separated list or "*" for all
     
     class Config:
         env_file = ".env"

@@ -16,10 +16,15 @@ async def save_contact(
     organization: str = Form(""),
     message: str = Form("")
 ):
-    csv_path = os.path.join(os.getcwd(), "user_contacts.csv")
-    file_exists = os.path.exists(csv_path)
+    # Use backend directory for CSV storage (works in both local and Render)
+    from pathlib import Path
+    backend_dir = Path(__file__).parent.parent.parent.parent
+    csv_path = backend_dir / "user_contacts.csv"
+    file_exists = csv_path.exists()
+    
     # Ensure parent dir exists
-    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    
     with open(csv_path, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
