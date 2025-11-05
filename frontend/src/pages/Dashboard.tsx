@@ -10,12 +10,10 @@ export default function Dashboard() {
   const [result, setResult] = useState<EvaluateResponse | null>(
     location.state?.result || null
   );
-  const [text, setText] = useState<string>(location.state?.text || '');
 
   useEffect(() => {
     if (location.state?.result) {
       setResult(location.state.result);
-      setText(location.state.text);
     }
   }, [location.state]);
 
