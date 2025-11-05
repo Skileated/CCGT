@@ -14,6 +14,8 @@ from scipy.spatial.distance import cosine
 from scipy.stats import entropy as scipy_entropy
 
 from ..models.embeddings import embed_sentences
+from ..core.config import settings
+from .preprocess import detect_connective_continuity, compute_syntactic_features
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +45,27 @@ def compute_local_entropy(embeddings: np.ndarray, similarities: np.ndarray, node
     neighbor_sims = neighbor_sims.copy()
     neighbor_sims[node_idx] = 0  # Remove self-connection
     
-    # Normalize to probabilities
+    # Normalize to probabilities with variance-based temperature (stabilizes entropy)
     total = np.sum(neighbor_sims)
     if total == 0:
         return 0.0
-    
+
     probs = neighbor_sims / total
     probs = probs[probs > 0]  # Remove zeros for entropy calculation
-    
+
     if len(probs) == 0:
         return 0.0
-    
+
+    if settings.OPTIMIZED_MODE:
+        # Compute local variance and adjust distribution temperature
+        variance = float(np.var(probs))
+        # Lower variance -> closer to uniform; higher variance -> sharpen slightly
+        temperature = 1.0 / (1.0 + variance)
+        adjusted = np.power(probs, temperature)
+        adjusted_sum = np.sum(adjusted)
+        if adjusted_sum > 0:
+            probs = adjusted / adjusted_sum
+
     return float(scipy_entropy(probs))
 
 
@@ -94,18 +106,12 @@ def build_graph(
         ), np.array([[1.0]]), np.array([0.0])
     
     # Build similarity matrix (ensure embeddings are float32 for precision)
-    embeddings_for_sim = embeddings.astype(np.float32) if embeddings.dtype == np.float16 else embeddings
+    embeddings_for_sim = embeddings.astype(np.float32) if embeddings.dtype != np.float32 else embeddings
     similarity_matrix = np.zeros((num_sentences, num_sentences), dtype=np.float32)
     
     for i in range(num_sentences):
         for j in range(i + 1, num_sentences):
             sim = cosine_similarity(embeddings_for_sim[i], embeddings_for_sim[j])
-            
-            # Boost if discourse markers present in either sentence
-            if discourse_markers[i] or discourse_markers[j]:
-                sim += discourse_boost
-                sim = min(sim, 1.0)  # Cap at 1.0
-            
             similarity_matrix[i, j] = sim
             similarity_matrix[j, i] = sim
     
@@ -117,7 +123,23 @@ def build_graph(
         compute_local_entropy(embeddings, similarity_matrix, i)
         for i in range(num_sentences)
     ])
+    # Normalize entropy to [0,1]
+    if settings.OPTIMIZED_MODE:
+        if entropy_array.size > 0:
+            mn, mx = float(np.min(entropy_array)), float(np.max(entropy_array))
+            if mx > mn:
+                entropy_array = (entropy_array - mn) / (mx - mn)
     
+    # Optional advanced weighting combining similarity, discourse continuity, and syntactic proxy
+    if settings.OPTIMIZED_MODE:
+        alpha, beta, gamma = settings.ALPHA, settings.BETA, settings.GAMMA
+        continuity = np.array(detect_connective_continuity(sentences), dtype=np.float32)
+        syntactic = np.array(compute_syntactic_features(sentences), dtype=np.float32)
+    else:
+        alpha, beta, gamma = 1.0, 0.0, 0.0
+        continuity = np.ones((num_sentences,), dtype=np.float32)
+        syntactic = np.zeros((num_sentences,), dtype=np.float32)
+
     # Build edge list (only above threshold)
     edge_list = []
     edge_weights = []
@@ -127,7 +149,16 @@ def build_graph(
             if similarity_matrix[i, j] >= similarity_threshold:
                 edge_list.append([i, j])
                 edge_list.append([j, i])  # Undirected graph
-                weight = float(similarity_matrix[i, j])
+                base = float(similarity_matrix[i, j])
+                if settings.OPTIMIZED_MODE:
+                    disc = discourse_boost if (discourse_markers[i] or discourse_markers[j]) else 0.0
+                    cont = float((continuity[i] + continuity[j]) / 2.0)
+                    syn_align = 1.0 - float(abs(syntactic[i] - syntactic[j]))
+                    weight = float(alpha * base + beta * cont + gamma * syn_align)
+                    weight += disc
+                    # Clip outliers (> mean + 3*std will be clipped later after list built)
+                else:
+                    weight = base
                 edge_weights.append(weight)
                 edge_weights.append(weight)
     
@@ -140,6 +171,13 @@ def build_graph(
             edge_weights.append(weight)
             edge_weights.append(weight)
     
+    # Clip/dampen outlier edges
+    if edge_weights:
+        ew = np.array(edge_weights, dtype=np.float32)
+        mean_w, std_w = float(np.mean(ew)), float(np.std(ew))
+        cap = mean_w + 3.0 * std_w
+        edge_weights = [float(min(w, cap)) for w in edge_weights]
+
     # Convert embeddings to float32 for tensor operations (float16 can cause issues)
     if embeddings.dtype == np.float16:
         embeddings = embeddings.astype(np.float32)

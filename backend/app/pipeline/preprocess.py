@@ -83,11 +83,57 @@ def normalize_text(text: str) -> str:
     Returns:
         Normalized text
     """
-    # Remove excessive whitespace
+    # Strict normalization: collapse whitespace, unify punctuation spacing
+    text = text.replace('\u00A0', ' ')
     text = re.sub(r'\s+', ' ', text)
-    # Trim
+    text = re.sub(r"\s*([,;:])\s*", r"\1 ", text)
+    text = re.sub(r"\s*([.!?])\s*", r"\1 ", text)
     text = text.strip()
     return text
+
+
+def compute_syntactic_features(sentences: List[str]) -> List[float]:
+    """
+    Compute a simple syntactic distance proxy per sentence using spaCy dependency parse.
+    Returns a list where higher values indicate more complex/shifted syntax.
+    """
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except Exception:
+        return [0.0 for _ in sentences]
+
+    scores: List[float] = []
+    for sent in sentences:
+        doc = nlp(sent)
+        deps = [(abs(token.head.i - token.i)) for token in doc if token.head is not token]
+        score = float(sum(deps) / len(deps)) if deps else 0.0
+        scores.append(score)
+    if scores:
+        mn, mx = min(scores), max(scores)
+        if mx > mn:
+            scores = [(s - mn) / (mx - mn) for s in scores]
+        else:
+            scores = [0.0 for _ in scores]
+    return scores
+
+
+def detect_connective_continuity(sentences: List[str]) -> List[float]:
+    """Score continuity based on discourse connectives at sentence starts (0..1)."""
+    continuity: List[float] = []
+    for i, sent in enumerate(sentences):
+        s = sent.strip().lower()
+        starts_with = next((m for m in DISCOURSE_MARKERS if s.startswith(m)), None)
+        if i == 0:
+            continuity.append(1.0)
+        else:
+            if starts_with in {"however", "nevertheless", "nonetheless", "conversely"}:
+                continuity.append(0.4)
+            elif starts_with in {"therefore", "thus", "hence", "accordingly"}:
+                continuity.append(0.7)
+            else:
+                continuity.append(0.8)
+    return continuity
 
 
 def preprocess_text(text: str) -> Tuple[List[str], List[List[str]]]:

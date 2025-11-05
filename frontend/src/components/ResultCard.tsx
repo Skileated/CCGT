@@ -37,7 +37,7 @@ export default function ResultCard({ result }: ResultCardProps) {
                 ? 'bg-yellow-500'
                 : 'bg-red-500'
             }`}
-            style={{ width: `${result.coherence_percent}%` }}
+          style={{ width: `${result.coherence_percent}%`, transition: 'width 0.6s ease' }}
           />
         </div>
       </div>

@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     CACHE_EMBEDDINGS: bool = True
     EMBEDDING_CACHE_DIR: str = "./models/embedding_cache"
     USE_FLOAT16: bool = True  # Use half precision for embeddings
+
+    # Optimization toggle
+    OPTIMIZED_MODE: bool = True
+    ALPHA: float = 0.7
+    BETA: float = 0.2
+    GAMMA: float = 0.1
     
     # Database (for future use)
     DATABASE_URL: Optional[str] = None

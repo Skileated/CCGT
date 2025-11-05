@@ -8,7 +8,7 @@ Maps to SRS: Model Architecture and Scoring Requirements.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv, global_mean_pool, global_max_pool
+from torch_geometric.nn import GATConv, GATv2Conv, global_mean_pool, global_max_pool
 from torch_geometric.data import Data
 from typing import Tuple
 import logging
@@ -47,22 +47,33 @@ class GraphTransformer(nn.Module):
         # Input projection
         self.input_proj = nn.Linear(input_dim, self.hidden_dim)
         
-        # GAT layers
+        # GAT layers (use GATv2 when optimized)
         self.gat_layers = nn.ModuleList()
         for i in range(self.num_layers):
-            in_channels = self.hidden_dim if i == 0 else self.hidden_dim * self.num_heads
-            self.gat_layers.append(
-                GATConv(
-                    in_channels,
-                    self.hidden_dim,
-                    heads=self.num_heads,
-                    dropout=self.dropout,
-                    concat=True
+            in_channels = self.hidden_dim if i == 0 else self.hidden_dim * (1 if settings.OPTIMIZED_MODE else self.num_heads)
+            if settings.OPTIMIZED_MODE:
+                self.gat_layers.append(
+                    GATv2Conv(
+                        in_channels,
+                        self.hidden_dim,
+                        heads=4,
+                        dropout=max(self.dropout, 0.2),
+                        concat=False
+                    )
                 )
-            )
+            else:
+                self.gat_layers.append(
+                    GATConv(
+                        in_channels,
+                        self.hidden_dim,
+                        heads=self.num_heads,
+                        dropout=self.dropout,
+                        concat=True
+                    )
+                )
         
         # Final projection to single dimension per node
-        final_dim = self.hidden_dim * self.num_heads
+        final_dim = self.hidden_dim if settings.OPTIMIZED_MODE else self.hidden_dim * self.num_heads
         self.final_proj = nn.Linear(final_dim, self.hidden_dim)
         
         # Scoring head with attention
@@ -73,13 +84,26 @@ class GraphTransformer(nn.Module):
             batch_first=True
         )
         
-        self.scorer = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_dim // 2, 1),
-            nn.Sigmoid()
-        )
+        if settings.OPTIMIZED_MODE:
+            # Smoother head: add an extra linear + dropout before sigmoid
+            self.scorer = nn.Sequential(
+                nn.Linear(self.hidden_dim, self.hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(self.dropout),
+                nn.Linear(self.hidden_dim // 2, self.hidden_dim // 4),
+                nn.ReLU(),
+                nn.Dropout(self.dropout),
+                nn.Linear(self.hidden_dim // 4, 1),
+                nn.Sigmoid()
+            )
+        else:
+            self.scorer = nn.Sequential(
+                nn.Linear(self.hidden_dim, self.hidden_dim // 2),
+                nn.ReLU(),
+                nn.Dropout(self.dropout),
+                nn.Linear(self.hidden_dim // 2, 1),
+                nn.Sigmoid()
+            )
         
         self._init_weights()
     
@@ -107,11 +131,14 @@ class GraphTransformer(nn.Module):
         x = self.input_proj(x)
         x = F.relu(x)
         
-        # GAT layers
+        # GNN layers with optional residuals and stronger dropout
         for gat_layer in self.gat_layers:
+            residual = x
             x = gat_layer(x, edge_index)
             x = F.relu(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
+            x = F.dropout(x, p=max(self.dropout, 0.2) if settings.OPTIMIZED_MODE else self.dropout, training=self.training)
+            if settings.OPTIMIZED_MODE and residual.shape == x.shape:
+                x = x + residual
         
         # Final projection
         node_features = self.final_proj(x)
@@ -171,6 +198,10 @@ class CoherenceModel:
         self.device = get_device()
         self.input_dim = None
         self._initialized = False
+        try:
+            torch.manual_seed(42)
+        except Exception:
+            pass
     
     def initialize(self, input_dim: int):
         """Initialize the model with given input dimension."""
@@ -198,9 +229,14 @@ class CoherenceModel:
         Returns:
             Tuple of (coherence_score, node_importances)
         """
-        if not self._initialized:
-            # Initialize with graph's feature dimension
-            self.initialize(graph.x.shape[1] - 1)  # Subtract 1 for entropy feature
+        # Get actual graph feature dimension (embeddings + entropy)
+        actual_dim = graph.x.shape[1]
+        # Model expects embeddings only (subtract 1 for entropy feature)
+        expected_embed_dim = actual_dim - 1
+        
+        # Re-initialize if dimension mismatch
+        if not self._initialized or self.input_dim != expected_embed_dim:
+            self.initialize(expected_embed_dim)
         
         # Ensure graph is on CPU for memory efficiency
         if graph.x.device.type != 'cpu':

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.logging import logger
 from .api.v1 import evaluate, health
+from .api.v1 import contact
 
 
 @asynccontextmanager
@@ -55,6 +56,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, prefix=settings.API_V1_PREFIX, tags=["health"])
 app.include_router(evaluate.router, prefix=settings.API_V1_PREFIX, tags=["evaluation"])
+app.include_router(contact.router, prefix=settings.API_V1_PREFIX, tags=["Contact"])
 
 
 @app.get("/")

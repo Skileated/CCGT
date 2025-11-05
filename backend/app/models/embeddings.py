@@ -60,7 +60,8 @@ class EmbeddingCache:
     
     def _get_key(self, text: str) -> str:
         """Generate cache key from text."""
-        return hashlib.md5(text.encode('utf-8')).hexdigest()
+        # Use SHA1 to reduce collision risk
+        return hashlib.sha1(text.encode('utf-8')).hexdigest()
     
     def _get_cache_path(self, key: str) -> Path:
         """Get cache file path."""
@@ -192,6 +193,16 @@ def embed_sentences(sentences: List[str], batch_size: Optional[int] = None) -> n
     
     # Stack into single array
     embeddings = np.vstack(embeddings_list)
+
+    # Enforce dtype and normalization under optimized mode
+    if settings.OPTIMIZED_MODE:
+        # Use float32 for numeric stability downstream
+        if embeddings.dtype != np.float32:
+            embeddings = embeddings.astype(np.float32)
+        # Explicit L2 normalization to ensure exact cosine behavior
+        norms = np.linalg.norm(embeddings, ord=2, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        embeddings = embeddings / norms
     
     return embeddings
 

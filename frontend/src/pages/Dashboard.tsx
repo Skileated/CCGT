@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { EvaluateResponse } from '../api';
 import GraphViz from '../components/GraphViz';
 import ResultCard from '../components/ResultCard';
+import LineGraph from '../components/LineGraph';
 
 export default function Dashboard() {
   const location = useLocation();
@@ -44,6 +45,13 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {result.graph && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Sentence Contribution Line Graph</h2>
+          <LineGraph graph={result.graph} />
+        </div>
+      )}
 
       {result.disruption_report && result.disruption_report.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-6">

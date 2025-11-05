@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
+import { interpolateTurbo } from 'd3-scale-chromatic';
 import { GraphData } from '../api';
 
 interface GraphVizProps {
@@ -27,10 +28,12 @@ export default function GraphViz({ graph }: GraphVizProps) {
         d3
           .forceLink(graph.edges)
           .id((d: any) => d.id)
-          .distance((d: any) => 150 - d.weight * 100)
+          .distance((d: any) => 140 - d.weight * 80)
+          .strength(0.3)
       )
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2));
+      .force('charge', d3.forceManyBody().strength(-200))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(20));
 
     // Create edges
     const link = svg
@@ -40,12 +43,12 @@ export default function GraphViz({ graph }: GraphVizProps) {
       .enter()
       .append('line')
       .attr('stroke', (d: any) => {
-        // Color based on weight and whether it's a disruption
-        if (d.reason) return '#ef4444'; // Red for disruptions
-        return d.weight > 0.7 ? '#10b981' : d.weight > 0.4 ? '#f59e0b' : '#ef4444';
+        if (d.reason) return '#ef4444';
+        const v = Math.max(0, Math.min(1, d.weight));
+        return interpolateTurbo(v);
       })
-      .attr('stroke-width', (d: any) => Math.max(1, d.weight * 3))
-      .attr('stroke-opacity', 0.6);
+      .attr('stroke-width', (d: any) => Math.max(1, d.weight * 2.5))
+      .attr('stroke-opacity', 0.65);
 
     // Create nodes
     const node = svg
@@ -54,10 +57,11 @@ export default function GraphViz({ graph }: GraphVizProps) {
       .data(graph.nodes)
       .enter()
       .append('circle')
-      .attr('r', (d: any) => 8 + (d.importance_score || 0.5) * 8)
+      .attr('r', 0)
       .attr('fill', (d: any) => {
-        const importance = d.importance_score || 0.5;
-        return d3.interpolateBlues(importance);
+        const val = (d.importance_score ?? (1 - (d.entropy ?? 0))) as number;
+        const clamped = Math.max(0, Math.min(1, val));
+        return interpolateTurbo(clamped);
       })
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
@@ -68,6 +72,13 @@ export default function GraphViz({ graph }: GraphVizProps) {
           .on('drag', dragged)
           .on('end', dragended)
       );
+
+    // Animate node entry
+    node
+      .transition()
+      .duration(600)
+      .attr('r', (d: any) => 8 + (d.importance_score || 0.5) * 8)
+      .ease(d3.easeCubicOut);
 
     // Add labels
     const label = svg
@@ -123,6 +134,12 @@ export default function GraphViz({ graph }: GraphVizProps) {
       .on('mouseout', () => {
         tooltip.transition().duration(200).style('opacity', 0);
       });
+
+    // Smoothly animate link positions
+    link
+      .transition()
+      .duration(500)
+      .ease(d3.easeCubicOut);
 
     // Update positions on simulation tick
     simulation.on('tick', () => {

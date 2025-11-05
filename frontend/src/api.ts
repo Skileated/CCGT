@@ -73,3 +73,15 @@ export const healthCheck = async () => {
   return response.data;
 };
 
+export const submitContact = async (params: { name: string; email: string; organization?: string; message?: string; }) => {
+  const form = new FormData();
+  form.append('name', params.name);
+  form.append('email', params.email);
+  form.append('organization', params.organization || '');
+  form.append('message', params.message || '');
+  const response = await api.post('/api/v1/contact', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+

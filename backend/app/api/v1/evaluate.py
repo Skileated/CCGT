@@ -7,6 +7,7 @@ Maps to SRS: API Evaluation Endpoints.
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 import logging
+import math
 import torch
 
 from ...schemas import (
@@ -83,9 +84,17 @@ async def evaluate_text(request: EvaluateRequest):
         
         # Build response
         try:
+            # Ensure coherence_score is valid
+            if math.isnan(coherence_score) or not math.isfinite(coherence_score):
+                logger.warning(f"Invalid coherence_score: {coherence_score}, using fallback")
+                coherence_score = 0.5  # Fallback to neutral score
+            
+            coherence_percent = int(coherence_score * 100)
+            coherence_percent = max(0, min(100, coherence_percent))  # Clamp to [0, 100]
+            
             response = EvaluateResponse(
-                coherence_score=coherence_score,
-                coherence_percent=int(coherence_score * 100),
+                coherence_score=float(coherence_score),
+                coherence_percent=coherence_percent,
                 disruption_report=[
                     DisruptionItem(**d) for d in disruption_report
                 ]
