@@ -73,15 +73,23 @@ export const healthCheck = async () => {
   return response.data;
 };
 
-export const submitContact = async (params: { name: string; email: string; organization?: string; message?: string; }) => {
+export const submitContact = async (params: { name: string; email: string; organization: string; message: string; }) => {
   const form = new FormData();
   form.append('name', params.name);
   form.append('email', params.email);
-  form.append('organization', params.organization || '');
-  form.append('message', params.message || '');
-  const response = await api.post('/api/v1/contact', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  form.append('organization', params.organization);
+  form.append('message', params.message);
+  
+  // Use a separate axios instance without default Content-Type for FormData
+  // axios will automatically set multipart/form-data with boundary
+  const response = await axios.post(`${API_BASE_URL}/api/v1/contact`, form, {
+    headers: {
+      ...(API_KEY && { Authorization: `Bearer ${API_KEY}` }),
+      // Don't set Content-Type - let axios/browser set it with boundary
+    },
   });
+  
+  // axios automatically throws for non-2xx status codes, so if we get here, it's a success
   return response.data;
 };
 

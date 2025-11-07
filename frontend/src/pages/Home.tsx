@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Footer from '../components/Footer';
+import { submitContact } from '../api';
 
 export default function Home() {
   const navigate = useNavigate();
   const [contactOk, setContactOk] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleDemoClick = () => {
     navigate('/demo');
@@ -176,29 +178,65 @@ export default function Home() {
         >
           <h2 className="text-2xl font-semibold mb-4 text-center text-gray-800">Contact Us</h2>
           <form
+            ref={formRef}
             onSubmit={async (e) => {
               e.preventDefault();
               setContactOk(null);
-              const formData = new FormData(e.currentTarget as HTMLFormElement);
+              
+              // Get form element reference - use ref if available, otherwise use currentTarget
+              const form = formRef.current || (e.currentTarget as HTMLFormElement);
+              if (!form) {
+                console.error('Form element not found');
+                return;
+              }
+              
+              const formData = new FormData(form);
+              const name = formData.get('name') as string;
+              const email = formData.get('email') as string;
+              const organization = formData.get('organization') as string;
+              const message = formData.get('message') as string;
+              
               try {
-                const response = await fetch('/api/v1/contact', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.status === 'success') {
-                  setContactOk('Thank you! We\'ll reach out soon.');
-                  (e.currentTarget as HTMLFormElement).reset();
+                const data = await submitContact({ name, email, organization, message });
+                // If we get here, the request was successful (no exception thrown)
+                // The CSV is being updated, so show success message
+                setContactOk('Thank you! We\'ll reach out soon.');
+                
+                // Reset form safely
+                if (form) {
+                  form.reset();
                 }
-              } catch (err) {
-                setContactOk('Error submitting form. Please try again.');
+              } catch (err: any) {
+                console.error('Form submission error:', err);
+                
+                // Extract error message from various error formats
+                let errorMessage = 'Error submitting form. Please try again.';
+                
+                if (err.message) {
+                  errorMessage = err.message;
+                } else if (err.response?.data?.detail) {
+                  errorMessage = err.response.data.detail;
+                } else if (err.response?.data?.message) {
+                  errorMessage = err.response.data.message;
+                } else if (typeof err === 'string') {
+                  errorMessage = err;
+                }
+                
+                setContactOk(`Error: ${errorMessage}`);
               }
             }}
             className="space-y-4"
           >
             <input name="name" placeholder="Name" className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500" required />
-            <input name="email" type="email" placeholder="Email (optional)" className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500" />
-            <input name="organization" placeholder="Organization (optional)" className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500" />
-            <textarea name="message" placeholder="Message" className="w-full border border-gray-300 rounded-lg p-3 h-24 focus:outline-none focus:border-indigo-500"></textarea>
+            <input name="email" type="email" placeholder="Email" className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500" required />
+            <input name="organization" placeholder="Organization" className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500" required />
+            <textarea name="message" placeholder="Message" className="w-full border border-gray-300 rounded-lg p-3 h-24 focus:outline-none focus:border-indigo-500" required></textarea>
             <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-all">Submit</button>
-            {contactOk && <div className="text-center text-green-600">{contactOk}</div>}
+            {contactOk && (
+              <div className={`text-center ${contactOk.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                {contactOk}
+              </div>
+            )}
           </form>
         </motion.div>
       </section>
